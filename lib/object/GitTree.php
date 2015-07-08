@@ -18,10 +18,13 @@
  * along with glip.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class GitTreeError extends Exception {}
-class GitTreeInvalidPathError extends GitTreeError {}
 
-require_once('git_object.class.php');
+#require_once('git_object.class.php');
+
+namespace ennosuke\glip\object;
+
+use ennosuke\glip\Git as Git;
+use \StdClass as StdClass;
 
 class GitTree extends GitObject
 {
@@ -29,43 +32,44 @@ class GitTree extends GitObject
 
     public function __construct($repo)
     {
-	parent::__construct($repo, Git::OBJ_TREE);
+        parent::__construct($repo, Git::OBJ_TREE);
     }
 
-    public function _unserialize($data)
+    public function unserialize($data)
     {
-	$this->nodes = array();
-	$start = 0;
-	while ($start < strlen($data))
-	{
-	    $node = new stdClass;
+        parent::unserialize($data);
+        $this->nodes = array();
+        $start = 0;
+        while ($start < strlen($data)) {
+            $node = new stdClass;
 
-	    $pos = strpos($data, "\0", $start);
-	    list($node->mode, $node->name) = explode(' ', substr($data, $start, $pos-$start), 2);
-	    $node->mode = intval($node->mode, 8);
+            $pos = strpos($data, "\0", $start);
+            list($node->mode, $node->name) = explode(' ', substr($data, $start, $pos-$start), 2);
+            $node->mode = intval($node->mode, 8);
             $node->is_dir = !!($node->mode & 040000);
             $node->is_submodule = ($node->mode == 57344);
-	    $node->object = substr($data, $pos+1, 20);
-	    $start = $pos+21;
+            $node->object = substr($data, $pos+1, 20);
+            $start = $pos+21;
 
-	    $this->nodes[$node->name] = $node;
-	}
-	unset($data);
+            $this->nodes[$node->name] = $node;
+        }
+        unset($data);
     }
 
-    protected static function nodecmp(&$a, &$b)
+    protected static function nodecmp(&$nodeA, &$nodeB)
     {
-        return strcmp($a->name, $b->name);
+        return strcmp($nodeA ->name, $nodeB->name);
     }
 
-    public function _serialize()
+    public function serialize()
     {
-	$s = '';
+        $serialized = '';
         /* git requires nodes to be sorted */
         uasort($this->nodes, array('GitTree', 'nodecmp'));
-	foreach ($this->nodes as $node)
-	    $s .= sprintf("%s %s\0%s", base_convert($node->mode, 10, 8), $node->name, $node->object);
-	return $s;
+        foreach ($this->nodes as $node) {
+            $serialized .= sprintf("%s %s\0%s", base_convert($node->mode, 10, 8), $node->name, $node->object);
+        }
+        return $serialized;
     }
 
     /**
@@ -81,29 +85,34 @@ class GitTree extends GitObject
      */
     public function find($path)
     {
-        if (!is_array($path))
+        if (!is_array($path)) {
             $path = explode('/', $path);
+        }
 
-        while ($path && !$path[0])
+        while ($path && !$path[0]) {
             array_shift($path);
-        if (!$path)
+        }
+        if (!$path) {
             return $this->getName();
+        }
 
-        if (!isset($this->nodes[$path[0]]))
-            return NULL;
+        if (!isset($this->nodes[$path[0]])) {
+            return null;
+        }
         $cur = $this->nodes[$path[0]]->object;
 
         array_shift($path);
-        while ($path && !$path[0])
+        while ($path && !$path[0]) {
             array_shift($path);
+        }
 
-        if (!$path)
+        if (!$path) {
             return $cur;
-        else
-        {
+        } else {
             $cur = $this->repo->getObject($cur);
-            if (!($cur instanceof GitTree))
+            if (!($cur instanceof GitTree)) {
                 throw new GitTreeInvalidPathError;
+            }
             return $cur->find($path);
         }
     }
@@ -117,32 +126,24 @@ class GitTree extends GitObject
      */
     public function listRecursive()
     {
-        $r = array();
+        $content = array();
 
-        foreach ($this->nodes as $node)
-        {
-            if ($node->is_dir)
-            {
-                if ($node->is_submodule)
-                {
-                    $r[$node->name. ':submodule'] = $node->object;
-                }
-                else
-                {
+        foreach ($this->nodes as $node) {
+            if ($node->is_dir) {
+                if ($node->is_submodule) {
+                    $content[$node->name. ':submodule'] = $node->object;
+                } else {
                     $subtree = $this->repo->getObject($node->object);
-                    foreach ($subtree->listRecursive() as $entry => $blob)
-                    {
-                        $r[$node->name . '/' . $entry] = $blob;
+                    foreach ($subtree->listRecursive() as $entry => $blob) {
+                        $content[$node->name . '/' . $entry] = $blob;
                     }
                 }
-            }
-            else
-            {
-                $r[$node->name] = $node->object;
+            } else {
+                $content[$node->name] = $node->object;
             }
         }
 
-        return $r;
+        return $content;
     }
 
     /**
@@ -162,14 +163,13 @@ class GitTree extends GitObject
      */
     public function updateNode($path, $mode, $object)
     {
-        if (!is_array($path))
+        if (!is_array($path)) {
             $path = explode('/', $path);
+        }
         $name = array_shift($path);
-        if (count($path) == 0)
-        {
-            /* create leaf node */
-            if ($mode)
-            {
+        if (count($path) == 0) {
+        /* create leaf node */
+            if ($mode) {
                 $node = new stdClass;
                 $node->mode = $mode;
                 $node->name = $name;
@@ -177,31 +177,27 @@ class GitTree extends GitObject
                 $node->is_dir = !!($mode & 040000);
 
                 $this->nodes[$node->name] = $node;
-            }
-            else
+            } else {
                 unset($this->nodes[$name]);
+            }
 
             return array();
-        }
-        else
-        {
+        } else {
             /* descend one level */
-            if (isset($this->nodes[$name]))
-            {
+            if (isset($this->nodes[$name])) {
                 $node = $this->nodes[$name];
-                if (!$node->is_dir)
+                if (!$node->is_dir) {
                     throw new GitTreeInvalidPathError;
+                }
                 $subtree = clone $this->repo->getObject($node->object);
-            }
-            else
-            {
+            } else {
                 /* create new tree */
                 $subtree = new GitTree($this->repo);
 
                 $node = new stdClass;
                 $node->mode = 040000;
                 $node->name = $name;
-                $node->is_dir = TRUE;
+                $node->is_dir = true;
 
                 $this->nodes[$node->name] = $node;
             }
@@ -222,46 +218,41 @@ class GitTree extends GitObject
     const TREEDIFF_ADDED = self::TREEDIFF_B;
     const TREEDIFF_CHANGED = 0x03;
 
-    static public function treeDiff($a_tree, $b_tree)
+    public static function treeDiff($aTree, $bTree)
     {
-        $a_blobs = $a_tree ? $a_tree->listRecursive() : array();
-        $b_blobs = $b_tree ? $b_tree->listRecursive() : array();
+        $aBlobs = $aTree ? $aTree->listRecursive() : array();
+        $bBlobs = $bTree ? $bTree->listRecursive() : array();
 
-        $a_files = array_keys($a_blobs);
-        $b_files = array_keys($b_blobs);
+        $aFiles = array_keys($aBlobs);
+        $bFiles = array_keys($bBlobs);
 
         $changes = array();
 
-        sort($a_files);
-        sort($b_files);
-        $a = $b = 0;
-        while ($a < count($a_files) || $b < count($b_files))
-        {
-            if ($a < count($a_files) && $b < count($b_files))
-                $cmp = strcmp($a_files[$a], $b_files[$b]);
-            else
+        sort($aFiles);
+        sort($bFiles);
+        $aIndex = $bIndex = 0;
+        while ($aIndex < count($aFiles) || $bIndex < count($bFiles)) {
+            if ($aIndex < count($aFiles) && $bIndex < count($bFiles)) {
+                $cmp = strcmp($aFiles[$aIndex], $bFiles[$bIndex]);
+            } else {
                 $cmp = 0;
-            if ($b >= count($b_files) || $cmp < 0)
-            {
-                $changes[$a_files[$a]] = self::TREEDIFF_REMOVED;
-                $a++;
             }
-            else if ($a >= count($a_files) || $cmp > 0)
-            {
-                $changes[$b_files[$b]] = self::TREEDIFF_ADDED;
-                $b++;
-            }
-            else
-            {
-                if ($a_blobs[$a_files[$a]] != $b_blobs[$b_files[$b]])
-                    $changes[$a_files[$a]] = self::TREEDIFF_CHANGED;
+            if ($bIndex >= count($bFiles) || $cmp < 0) {
+                $changes[$aFiles[$aIndex]] = self::TREEDIFF_REMOVED;
+                $aIndex++;
+            } elseif ($aIndex >= count($aFiles) || $cmp > 0) {
+                $changes[$bFiles[$bIndex]] = self::TREEDIFF_ADDED;
+                $bIndex++;
+            } else {
+                if ($aBlobs[$aFiles[$aIndex]] != $bBlobs[$bFiles[$bIndex]]) {
+                    $changes[$aFiles[$aIndex]] = self::TREEDIFF_CHANGED;
+                }
 
-                $a++;
-                $b++;
+                $aIndex++;
+                $bIndex++;
             }
         }
 
         return $changes;
     }
 }
-

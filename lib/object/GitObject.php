@@ -18,6 +18,10 @@
  * along with glip.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+namespace ennosuke\glip\object;
+
+use ennosuke\glip\Git as Git;
+
 class GitObject
 {
     /**
@@ -25,14 +29,17 @@ class GitObject
      */
     public $repo;
     protected $type;
-    protected $name = NULL;
+    protected $name = null;
 
     /**
      * @brief Get the object's cached SHA-1 hash value.
      *
      * @returns (string) The hash value (binary sha1).
      */
-    public function getName() {	return $this->name; }
+    public function getName()
+    {
+        return $this->name;
+    }
 
     /**
      * @brief Get the object's type.
@@ -40,7 +47,10 @@ class GitObject
      * @returns (integer) One of Git::OBJ_COMMIT, Git::OBJ_TREE or
      * GIT::OBJ_BLOB.
      */
-    public function getType() { return $this->type; }
+    public function getType()
+    {
+        return $this->type;
+    }
 
     /**
      * @brief Create a GitObject of the specified type.
@@ -50,15 +60,21 @@ class GitObject
      * Git::OBJ_TREE, Git::OBJ_BLOB).
      * @returns A new GitCommit, GitTree or GitBlob object respectively.
      */
-    static public function create($repo, $type)
+    public static function create($repo, $type)
     {
-	if ($type == Git::OBJ_COMMIT)
-	    return new GitCommit($repo);
-	if ($type == Git::OBJ_TREE)
-	    return new GitTree($repo);
-	if ($type == Git::OBJ_BLOB)
-	    return new GitBlob($repo);
-	throw new Exception(sprintf('unhandled object type %d', $type));
+        if ($type == Git::OBJ_COMMIT) {
+            return new GitCommit($repo);
+        }
+        if ($type == Git::OBJ_TREE) {
+            return new GitTree($repo);
+        }
+        if ($type == Git::OBJ_BLOB) {
+            return new GitBlob($repo);
+        }
+        if ($type == Git::OBJ_TAG) {
+            return new GitTag($repo);
+        }
+        throw new \Exception(sprintf('unhandled object type %d', $type));
     }
 
     /**
@@ -70,13 +86,13 @@ class GitObject
      */
     protected function hash($data)
     {
-	$hash = hash_init('sha1');
-	hash_update($hash, Git::getTypeName($this->type));
-	hash_update($hash, ' ');
-	hash_update($hash, strlen($data));
-	hash_update($hash, "\0");
-	hash_update($hash, $data);
-	return hash_final($hash, TRUE);
+        $hash = hash_init('sha1');
+        hash_update($hash, Git::getTypeName($this->type));
+        hash_update($hash, ' ');
+        hash_update($hash, strlen($data));
+        hash_update($hash, "\0");
+        hash_update($hash, $data);
+        return hash_final($hash, true);
     }
 
     /**
@@ -87,8 +103,8 @@ class GitObject
      */
     public function __construct($repo, $type)
     {
-	$this->repo = $repo;
-	$this->type = $type;
+        $this->repo = $repo;
+        $this->type = $type;
     }
 
     /**
@@ -102,8 +118,7 @@ class GitObject
      */
     public function unserialize($data)
     {
-	$this->name = $this->hash($data);
-	$this->_unserialize($data);
+        $this->name = $this->hash($data);
     }
 
     /**
@@ -114,7 +129,6 @@ class GitObject
      */
     public function serialize()
     {
-	return $this->_serialize();
     }
 
     /**
@@ -125,7 +139,7 @@ class GitObject
      */
     public function rehash()
     {
-	$this->name = $this->hash($this->serialize());
+        $this->name = $this->hash($this->serialize());
     }
 
     /**
@@ -134,21 +148,23 @@ class GitObject
      */
     public function write()
     {
-	$sha1 = sha1_hex($this->name);
-	$path = sprintf('%s/objects/%s/%s', $this->repo->dir, substr($sha1, 0, 2), substr($sha1, 2));
-	if (file_exists($path))
-	    return FALSE;
-	$dir = dirname($path);
-	if (!is_dir($dir))
-	    mkdir(dirname($path), 0770);
-	$f = fopen($path, 'ab');
-	flock($f, LOCK_EX);
-	ftruncate($f, 0);
-	$data = $this->serialize();
-	$data = Git::getTypeName($this->type).' '.strlen($data)."\0".$data;
-	fwrite($f, gzcompress($data));
-	fclose($f);
-	return TRUE;
+        $sha1 = Git::sha1Hex($this->name);
+        $path = sprintf('%s/objects/%s/%s', $this->repo->dir, substr($sha1, 0, 2), substr($sha1, 2));
+        if (file_exists($path)) {
+            return false;
+        }
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            mkdir(dirname($path), 0770);
+        }
+        $file = fopen($path, 'ab');
+        $file = stream_filter_append($file, "Gz.compress");
+        flock($file, LOCK_EX);
+        ftruncate($file, 0);
+        $data = $this->serialize();
+        $data = Git::getTypeName($this->type).' '.strlen($data)."\0".$data;
+        fwrite($file, gzcompress($data));
+        fclose($file);
+        return true;
     }
 }
-

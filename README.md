@@ -1,0 +1,1 @@
+glip is a GIT library in PHP. patrikf wrothe the original which is the base for this fork.

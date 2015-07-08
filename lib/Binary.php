@@ -22,40 +22,48 @@
  * along with glip.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+namespace ennosuke\glip;
+
 final class Binary
 {
-    static public function uint16($str, $pos=0)
+    public static function uint16($str, $pos = 0)
     {
         return ord($str{$pos+0}) << 8 | ord($str{$pos+1});
     }
 
-    static public function uint32($str, $pos=0)
+    public static function uint32($str, $pos = 0)
     {
-        $a = unpack('Nx', substr($str, $pos, 4));
-        return $a['x'];
+        $result = unpack('Nx', substr($str, $pos, 4));
+        return $result['x'];
     }
 
-    static public function nuint32($n, $str, $pos=0)
+    public static function nuint32($number, $str, $pos = 0)
     {
-        $r = array();
-        for ($i = 0; $i < $n; $i++, $pos += 4)
-            $r[] = Binary::uint32($str, $pos);
-        return $r;
-    }
-
-    static public function fuint32($f) { return Binary::uint32(fread($f, 4)); }
-    static public function nfuint32($n, $f) { return Binary::nuint32($n, fread($f, 4*$n)); }
-
-    static public function git_varint($str, &$pos=0)
-    {
-        $r = 0;
-        $c = 0x80;
-        for ($i = 0; $c & 0x80; $i += 7)
-        {
-            $c = ord($str{$pos++});
-            $r |= (($c & 0x7F) << $i);
+        $reuslt = array();
+        for ($i = 0; $i < $number; $i++, $pos += 4) {
+            $reuslt[] = Binary::uint32($str, $pos);
         }
-        return $r;
+        return $reuslt;
+    }
+
+    public static function fuint32($file)
+    {
+        return Binary::uint32(fread($file, 4));
+    }
+    public static function nfuint32($number, $file)
+    {
+        return Binary::nuint32($number, fread($file, 4*$number));
+    }
+
+    public static function gitVarInt($str, &$pos = 0)
+    {
+        $result = 0;
+        $char = 0x80;
+        for ($i = 0; $char & 0x80; $i += 7) {
+            $char = ord($str{$pos++});
+            $result |= (($char & 0x7F) << $i);
+        }
+        return $result;
     }
 }
-
